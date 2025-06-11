@@ -4,37 +4,34 @@ services:
   web:
     build: .
     ports:
-      - "10000:5000"
+      - "5000:5000"
     environment:
-      - FLASK_APP=wsgi.py
-      - FLASK_ENV=production
-      - DATABASE_URL=postgresql://postgres:postgres@db:5432/hackathon
-      - SQLALCHEMY_DATABASE_URI=postgresql://postgres:postgres@db:5432/hackathon
-      - REDIS_URL=redis://redis:6379/0
+      - FLASK_APP=hackathon_app.py
+      - FLASK_ENV=development
+      - FLASK_DEBUG=1
+      - SECRET_KEY=your-secret-key-here
+      - DATABASE_URL=postgresql://hackathon:test123@db:5432/hackathon
+      - SQLALCHEMY_DATABASE_URI=postgresql://hackathon:test123@db:5432/hackathon
+    volumes:
+      - .:/app
     depends_on:
       - db
-      - redis
     restart: always
 
   db:
-    image: postgres:15
+    image: postgres:13
     environment:
-      - POSTGRES_USER=postgres
-      - POSTGRES_PASSWORD=postgres
+      - POSTGRES_USER=hackathon
+      - POSTGRES_PASSWORD=test123
       - POSTGRES_DB=hackathon
+    ports:
+      - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     restart: always
 
-  redis:
-    image: redis:7
-    volumes:
-      - redis_data:/data
-    restart: always
-
 volumes:
   postgres_data:
-  redis_data:
 
 networks:
   hackathon-network:
