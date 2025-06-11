@@ -24,24 +24,55 @@ login_manager = LoginManager()
 login_manager.init_app(app)
 login_manager.login_view = 'login'
 
-# Initialize Redis
-redis_client = redis.Redis(
-    host=app.config['REDIS_HOST'],
-    port=app.config['REDIS_PORT'],
-    db=app.config['REDIS_DB'],
-    password=app.config['REDIS_PASSWORD'],
-    decode_responses=True
-)
+# Initialize Redis with fallback to filesystem session
+try:
+    redis_client = redis.Redis(
+        host=app.config['REDIS_HOST'],
+        port=app.config['REDIS_PORT'],
+        db=app.config['REDIS_DB'],
+        password=app.config['REDIS_PASSWORD'],
+        decode_responses=True,
+        socket_timeout=5,
+        socket_connect_timeout=5
+    )
+    # Test connection
+    redis_client.ping()
+    app.config['SESSION_TYPE'] = 'redis'
+    app.config['SESSION_REDIS'] = redis_client
+except (redis.ConnectionError, redis.TimeoutError):
+    print("Redis connection failed, falling back to filesystem session")
+    app.config['SESSION_TYPE'] = 'filesystem'
+    app.config['SESSION_FILE_DIR'] = '/tmp/flask_session'
+    app.config['SESSION_FILE_THRESHOLD'] = 500
+    redis_client = None
 
-# Initialize Cache
-cache = Cache(app)
+# Initialize Cache with fallback
+if redis_client:
+    cache = Cache(app, config={
+        'CACHE_TYPE': 'redis',
+        'CACHE_REDIS_URL': app.config['REDIS_URL'],
+        'CACHE_DEFAULT_TIMEOUT': 300
+    })
+else:
+    cache = Cache(app, config={
+        'CACHE_TYPE': 'filesystem',
+        'CACHE_DIR': '/tmp/flask_cache',
+        'CACHE_DEFAULT_TIMEOUT': 300
+    })
 
-# Initialize Rate Limiter
-limiter = Limiter(
-    app=app,
-    key_func=get_remote_address,
-    storage_uri=app.config['RATELIMIT_STORAGE_URL']
-)
+# Initialize Rate Limiter with fallback
+if redis_client:
+    limiter = Limiter(
+        app=app,
+        key_func=get_remote_address,
+        storage_uri=app.config['RATELIMIT_STORAGE_URL']
+    )
+else:
+    limiter = Limiter(
+        app=app,
+        key_func=get_remote_address,
+        storage_uri="memory://"
+    )
 
 # Initialize Session
 Session(app)
