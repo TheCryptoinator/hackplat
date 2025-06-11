@@ -1,12 +1,6 @@
 # Use Python 3.12 slim image
 FROM python:3.12-slim
 
-# Set environment variables
-ENV PYTHONUNBUFFERED=1 \
-    PYTHONDONTWRITEBYTECODE=1 \
-    FLASK_APP=hackathon_app.py \
-    FLASK_ENV=development
-
 # Set work directory
 WORKDIR /app
 
@@ -21,12 +15,17 @@ RUN apt-get update && apt-get install -y \
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Create non-root user
+# Create a non-root user
 RUN useradd -m appuser && chown -R appuser:appuser /app
-USER appuser
 
-# Copy project
+# Copy application code
 COPY --chown=appuser:appuser . .
 
-# Run the application
-CMD ["gunicorn", "--bind", "0.0.0.0:5000", "--workers", "4", "--worker-class", "gevent", "hackathon_app:app"] 
+# Switch to non-root user
+USER appuser
+
+# Expose port
+EXPOSE 5000
+
+# Command to run the application
+CMD ["gunicorn", "--bind", "0.0.0.0:5000", "wsgi:app"] 
