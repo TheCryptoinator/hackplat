@@ -1,0 +1,36 @@
+{% extends "base.html" %}
+
+{% block title %}Create Team - Hackathon Platform{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-header">
+                <h3 class="text-center">Create New Team</h3>
+            </div>
+            <div class="card-body">
+                <form method="POST">
+                    <div class="mb-3">
+                        <label for="name" class="form-label">Team Name</label>
+                        <input type="text" class="form-control" id="name" name="name" required>
+                    </div>
+                    <div class="mb-3">
+                        <label for="hackathon_id" class="form-label">Hackathon</label>
+                        <select class="form-select" id="hackathon_id" name="hackathon_id" required>
+                            <option value="">Select a hackathon</option>
+                            {% for hackathon in hackathons %}
+                            <option value="{{ hackathon.id }}">{{ hackathon.title }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="d-grid gap-2">
+                        <button type="submit" class="btn btn-primary">Create Team</button>
+                        <a href="{{ url_for('dashboard') }}" class="btn btn-secondary">Cancel</a>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %} 

@@ -1,0 +1,411 @@
+{% extends "base.html" %}
+
+{% block title %}{{ hackathon.title }} - Space Hackathon Hub{% endblock %}
+
+{% block content %}
+<div class="row">
+    <!-- Main Content -->
+    <div class="col-lg-8">
+        <!-- Hackathon Header -->
+        <div class="card mb-4 glass-effect">
+            <div class="card-body">
+                <div class="d-flex justify-content-between align-items-start">
+                    <div>
+                        <h1 class="card-title mb-3 space-text-gradient">{{ hackathon.title }}</h1>
+                        <div class="mb-3">
+                            <span class="badge bg-primary me-2">
+                                <i class="fas fa-calendar me-1"></i>{{ hackathon.start_date.strftime('%B %d, %Y') }}
+                            </span>
+                            <span class="badge bg-info me-2">
+                                <i class="fas fa-clock me-1"></i>{{ hackathon.duration }} hours
+                            </span>
+                            <span class="badge bg-success">
+                                <i class="fas fa-map-marker-alt me-1"></i>{{ hackathon.location }}
+                            </span>
+                        </div>
+                    </div>
+                    {% if session.get('user_id') and session.get('role') in ['admin', 'organizer'] %}
+                    <div class="dropdown">
+                        <button class="btn btn-outline-primary dropdown-toggle" type="button" id="hackathonActions" 
+                                data-bs-toggle="dropdown" aria-expanded="false">
+                            <i class="fas fa-ellipsis-v"></i>
+                        </button>
+                        <ul class="dropdown-menu dropdown-menu-end glass-effect" aria-labelledby="hackathonActions">
+                            <li>
+                                <a class="dropdown-item" href="#" data-bs-toggle="modal" data-bs-target="#announcementModal">
+                                    <i class="fas fa-bullhorn me-2"></i>Make Announcement
+                                </a>
+                            </li>
+                            <li>
+                                <a class="dropdown-item" href="#" data-bs-toggle="modal" data-bs-target="#editHackathonModal">
+                                    <i class="fas fa-edit me-2"></i>Edit Hackathon
+                                </a>
+                            </li>
+                            <li><hr class="dropdown-divider"></li>
+                            <li>
+                                <a class="dropdown-item text-danger" href="#" data-bs-toggle="modal" 
+                                   data-bs-target="#deleteHackathonModal">
+                                    <i class="fas fa-trash me-2"></i>Delete Hackathon
+                                </a>
+                            </li>
+                        </ul>
+                    </div>
+                    {% endif %}
+                </div>
+                
+                <p class="card-text">{{ hackathon.description }}</p>
+                
+                <!-- Tracks -->
+                {% if hackathon.tracks %}
+                <div class="mb-3">
+                    <h5 class="mb-2 space-text-gradient">Tracks</h5>
+                    <div class="d-flex flex-wrap gap-2">
+                        {% for track in hackathon.tracks.split(',') %}
+                        <span class="badge bg-secondary track-badge" data-track="{{ track.strip() }}">
+                            <i class="fas fa-rocket me-1"></i>{{ track.strip() }}
+                        </span>
+                        {% endfor %}
+                    </div>
+                </div>
+                {% endif %}
+
+                <!-- Registration Status -->
+                <div class="mb-3">
+                    <h5 class="mb-2 space-text-gradient">Registration Status</h5>
+                    <div class="progress mb-2">
+                        <div class="progress-bar" role="progressbar" 
+                             data-width="{% if hackathon.max_participants > 0 %}{{ (hackathon.current_participants / hackathon.max_participants * 100)|round }}{% else %}0{% endif %}"
+                             aria-valuenow="{{ hackathon.current_participants }}" 
+                             aria-valuemin="0" 
+                             aria-valuemax="{{ hackathon.max_participants }}">
+                            {{ hackathon.current_participants }}/{{ hackathon.max_participants }} Participants
+                        </div>
+                    </div>
+                    {% if session.get('user_id') and not is_registered %}
+                    <form action="{{ url_for('register_for_hackathon', hackathon_id=hackathon.id) }}" method="POST" class="d-inline">
+                        <button type="submit" class="btn btn-primary" 
+                                {% if hackathon.current_participants >= hackathon.max_participants %}disabled{% endif %}>
+                            <i class="fas fa-user-plus me-1"></i>
+                            {% if hackathon.current_participants >= hackathon.max_participants %}
+                            Join Waitlist
+                            {% else %}
+                            Register Now
+                            {% endif %}
+                        </button>
+                    </form>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+
+        <!-- Teams Section -->
+        <div class="card mb-4 glass-effect">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h5 class="mb-0 space-text-gradient">Teams</h5>
+                {% if session.get('user_id') and is_registered and not has_team %}
+                <a href="{{ url_for('create_team', hackathon_id=hackathon.id) }}" class="btn btn-primary btn-sm">
+                    <i class="fas fa-plus me-1"></i>Create Team
+                </a>
+                {% endif %}
+            </div>
+            <div class="card-body">
+                {% if teams %}
+                <div class="row row-cols-1 row-cols-md-2 g-4">
+                    {% for team in teams %}
+                    <div class="col">
+                        <div class="card h-100 glass-effect">
+                            <div class="card-body">
+                                <h6 class="card-title space-text-gradient">{{ team.name }}</h6>
+                                <p class="card-text text-muted small">
+                                    <i class="fas fa-users me-1"></i>{{ team.member_count }} members
+                                </p>
+                                {% if session.get('user_id') and is_registered and not has_team %}
+                                <form action="{{ url_for('join_team', team_id=team.id) }}" method="POST">
+                                    <button type="submit" class="btn btn-outline-primary btn-sm">
+                                        <i class="fas fa-user-plus me-1"></i>Join Team
+                                    </button>
+                                </form>
+                                {% endif %}
+                            </div>
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+                {% else %}
+                <p class="text-muted mb-0">No teams have been created yet.</p>
+                {% endif %}
+            </div>
+        </div>
+
+        <!-- Announcements Section -->
+        <div class="card mb-4 glass-effect">
+            <div class="card-header">
+                <h5 class="mb-0 space-text-gradient">Announcements</h5>
+            </div>
+            <div class="card-body">
+                {% if announcements %}
+                <div class="list-group">
+                    {% for announcement in announcements %}
+                    <div class="list-group-item list-group-item-action glass-effect
+                                {% if announcement.priority == 'high' %}announcement-high{% else %}announcement-normal{% endif %}">
+                        <div class="d-flex w-100 justify-content-between">
+                            <h6 class="mb-1 space-text-gradient">{{ announcement.title }}</h6>
+                            <small class="text-muted">
+                                {{ announcement.created_at.strftime('%B %d, %Y %H:%M') }}
+                            </small>
+                        </div>
+                        <p class="mb-1">{{ announcement.content }}</p>
+                        {% if announcement.priority == 'high' %}
+                        <span class="badge bg-danger">
+                            <i class="fas fa-exclamation-circle me-1"></i>High Priority
+                        </span>
+                        {% endif %}
+                    </div>
+                    {% endfor %}
+                </div>
+                {% else %}
+                <p class="text-muted mb-0">No announcements yet.</p>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    <!-- Sidebar -->
+    <div class="col-lg-4">
+        <!-- Sponsors Section -->
+        <div class="card mb-4 glass-effect">
+            <div class="card-header">
+                <h5 class="mb-0 space-text-gradient">Sponsors</h5>
+            </div>
+            <div class="card-body">
+                {% if sponsors %}
+                <div class="row row-cols-2 g-3">
+                    {% for sponsor in sponsors %}
+                    <div class="col">
+                        <div class="card h-100 glass-effect">
+                            <div class="card-body text-center">
+                                <img src="{{ sponsor.logo_url }}" alt="{{ sponsor.name }}" 
+                                     class="sponsor-logo mb-2" onerror="this.src='/static/images/default-sponsor.png'">
+                                <h6 class="card-title mb-0 space-text-gradient">{{ sponsor.name }}</h6>
+                                <p class="card-text text-muted small">{{ sponsor.contribution }}</p>
+                            </div>
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+                {% else %}
+                <p class="text-muted mb-0">No sponsors yet.</p>
+                {% endif %}
+            </div>
+        </div>
+
+        <!-- Important Dates -->
+        <div class="card mb-4 glass-effect">
+            <div class="card-header">
+                <h5 class="mb-0 space-text-gradient">Important Dates</h5>
+            </div>
+            <div class="card-body">
+                <ul class="list-group list-group-flush">
+                    <li class="list-group-item d-flex justify-content-between align-items-center glass-effect">
+                        <span><i class="fas fa-calendar-check me-2"></i>Registration Deadline</span>
+                        <span class="badge bg-primary">
+                            {{ hackathon.registration_deadline.strftime('%B %d, %Y') }}
+                        </span>
+                    </li>
+                    <li class="list-group-item d-flex justify-content-between align-items-center glass-effect">
+                        <span><i class="fas fa-rocket me-2"></i>Hackathon Start</span>
+                        <span class="badge bg-success">
+                            {{ hackathon.start_date.strftime('%B %d, %Y') }}
+                        </span>
+                    </li>
+                    <li class="list-group-item d-flex justify-content-between align-items-center glass-effect">
+                        <span><i class="fas fa-flag-checkered me-2"></i>Hackathon End</span>
+                        <span class="badge bg-danger">
+                            {{ hackathon.end_date.strftime('%B %d, %Y') }}
+                        </span>
+                    </li>
+                </ul>
+            </div>
+        </div>
+
+        <!-- Prizes -->
+        {% if hackathon.prizes %}
+        <div class="card mb-4 glass-effect">
+            <div class="card-header">
+                <h5 class="mb-0 space-text-gradient">Prizes</h5>
+            </div>
+            <div class="card-body">
+                <ul class="list-group list-group-flush">
+                    {% for prize in hackathon.prizes.split(',') %}
+                    <li class="list-group-item glass-effect">
+                        <i class="fas fa-trophy text-warning me-2"></i>{{ prize.strip() }}
+                    </li>
+                    {% endfor %}
+                </ul>
+            </div>
+        </div>
+        {% endif %}
+    </div>
+</div>
+
+<!-- Announcement Modal -->
+<div class="modal fade" id="announcementModal" tabindex="-1" aria-labelledby="announcementModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content glass-effect">
+            <div class="modal-header">
+                <h5 class="modal-title space-text-gradient" id="announcementModalLabel">Make Announcement</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <form action="{{ url_for('create_announcement', hackathon_id=hackathon.id) }}" method="POST">
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label for="title" class="form-label">Title</label>
+                        <input type="text" class="form-control" id="title" name="title" required>
+                    </div>
+                    <div class="mb-3">
+                        <label for="content" class="form-label">Content</label>
+                        <textarea class="form-control" id="content" name="content" rows="3" required></textarea>
+                    </div>
+                    <div class="mb-3">
+                        <label for="priority" class="form-label">Priority</label>
+                        <select class="form-select" id="priority" name="priority">
+                            <option value="normal">Normal</option>
+                            <option value="high">High</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-primary">Post Announcement</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Edit Hackathon Modal -->
+<div class="modal fade" id="editHackathonModal" tabindex="-1" aria-labelledby="editHackathonModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content glass-effect">
+            <div class="modal-header">
+                <h5 class="modal-title space-text-gradient" id="editHackathonModalLabel">Edit Hackathon</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <form action="{{ url_for('edit_hackathon', hackathon_id=hackathon.id) }}" method="POST">
+                <div class="modal-body">
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label for="title" class="form-label">Title</label>
+                            <input type="text" class="form-control" id="title" name="title" 
+                                   value="{{ hackathon.title }}" required>
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label for="location" class="form-label">Location</label>
+                            <input type="text" class="form-control" id="location" name="location" 
+                                   value="{{ hackathon.location }}" required>
+                        </div>
+                    </div>
+                    <div class="mb-3">
+                        <label for="description" class="form-label">Description</label>
+                        <textarea class="form-control" id="description" name="description" 
+                                  rows="3" required>{{ hackathon.description }}</textarea>
+                    </div>
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label for="start_date" class="form-label">Start Date</label>
+                            <input type="datetime-local" class="form-control" id="start_date" name="start_date" 
+                                   value="{{ hackathon.start_date.strftime('%Y-%m-%dT%H:%M') }}" required>
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label for="end_date" class="form-label">End Date</label>
+                            <input type="datetime-local" class="form-control" id="end_date" name="end_date" 
+                                   value="{{ hackathon.end_date.strftime('%Y-%m-%dT%H:%M') }}" required>
+                        </div>
+                    </div>
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label for="max_participants" class="form-label">Max Participants</label>
+                            <input type="number" class="form-control" id="max_participants" name="max_participants" 
+                                   value="{{ hackathon.max_participants }}" required>
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label for="registration_deadline" class="form-label">Registration Deadline</label>
+                            <input type="datetime-local" class="form-control" id="registration_deadline" 
+                                   name="registration_deadline" 
+                                   value="{{ hackathon.registration_deadline.strftime('%Y-%m-%dT%H:%M') }}" required>
+                        </div>
+                    </div>
+                    <div class="mb-3">
+                        <label for="tracks" class="form-label">Tracks (comma-separated)</label>
+                        <input type="text" class="form-control" id="tracks" name="tracks" 
+                               value="{{ hackathon.tracks }}">
+                    </div>
+                    <div class="mb-3">
+                        <label for="prizes" class="form-label">Prizes (comma-separated)</label>
+                        <input type="text" class="form-control" id="prizes" name="prizes" 
+                               value="{{ hackathon.prizes }}">
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-primary">Save Changes</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Delete Hackathon Modal -->
+<div class="modal fade" id="deleteHackathonModal" tabindex="-1" aria-labelledby="deleteHackathonModalLabel" 
+     aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content glass-effect">
+            <div class="modal-header">
+                <h5 class="modal-title space-text-gradient" id="deleteHackathonModalLabel">Delete Hackathon</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <p>Are you sure you want to delete this hackathon? This action cannot be undone.</p>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <form action="{{ url_for('delete_hackathon', hackathon_id=hackathon.id) }}" method="POST" class="d-inline">
+                    <button type="submit" class="btn btn-danger">Delete Hackathon</button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Set progress bar width
+    const progressBar = document.querySelector('.progress-bar');
+    if (progressBar) {
+        progressBar.style.width = progressBar.dataset.width + '%';
+    }
+
+    // Initialize tooltips
+    var tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
+    var tooltipList = tooltipTriggerList.map(function (tooltipTriggerEl) {
+        return new bootstrap.Tooltip(tooltipTriggerEl);
+    });
+
+    // Handle track badge clicks
+    document.querySelectorAll('.track-badge').forEach(function(badge) {
+        badge.addEventListener('click', function() {
+            const track = this.dataset.track;
+            console.log('Selected track:', track);
+            // Add your track selection logic here
+        });
+    });
+
+    // Add floating animation to cards
+    document.querySelectorAll('.card').forEach(card => {
+        card.classList.add('float-animation');
+    });
+});
+</script>
+{% endblock %} 

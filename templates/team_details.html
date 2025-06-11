@@ -1,0 +1,103 @@
+{% extends "base.html" %}
+
+{% block title %}{{ team.name }} - Hackathon Platform{% endblock %}
+
+{% block content %}
+<div class="container">
+    <nav aria-label="breadcrumb">
+        <ol class="breadcrumb">
+            <li class="breadcrumb-item"><a href="{{ url_for('index') }}">Home</a></li>
+            <li class="breadcrumb-item"><a href="{{ url_for('hackathon_details', hackathon_id=team.hackathon_id) }}">Hackathon</a></li>
+            <li class="breadcrumb-item active">{{ team.name }}</li>
+        </ol>
+    </nav>
+
+    <div class="row">
+        <div class="col-md-8">
+            <div class="card mb-4">
+                <div class="card-body">
+                    <h1 class="card-title">{{ team.name }}</h1>
+                    <h6 class="card-subtitle mb-3 text-muted">Hackathon: {{ team.hackathon_title }}</h6>
+                    <p class="card-text">{{ team.description }}</p>
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div>
+                            <span class="badge bg-primary">{{ team.member_count }}/{{ team.max_members }} members</span>
+                        </div>
+                        <a href="{{ url_for('submit_project', team_id=team.id) }}" class="btn btn-primary">Submit Project</a>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Team Members -->
+            <div class="card mb-4">
+                <div class="card-header">
+                    <h5 class="mb-0">Team Members</h5>
+                </div>
+                <div class="card-body">
+                    <div class="list-group">
+                        {% for member in members %}
+                        <div class="list-group-item">
+                            <div class="d-flex w-100 justify-content-between">
+                                <h6 class="mb-1">{{ member.username }}</h6>
+                                <small class="text-muted">{{ member.role }}</small>
+                            </div>
+                        </div>
+                        {% endfor %}
+                    </div>
+                </div>
+            </div>
+
+            <!-- Submissions -->
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="mb-0">Project Submissions</h5>
+                </div>
+                <div class="card-body">
+                    {% if submissions %}
+                        <div class="list-group">
+                            {% for submission in submissions %}
+                            <div class="list-group-item">
+                                <div class="d-flex w-100 justify-content-between">
+                                    <h5 class="mb-1">{{ submission.title }}</h5>
+                                    <small>{{ submission.created_at }}</small>
+                                </div>
+                                <p class="mb-1">{{ submission.description }}</p>
+                                <div class="mt-2">
+                                    {% if submission.github_link %}
+                                    <a href="{{ submission.github_link }}" target="_blank" class="btn btn-outline-dark btn-sm">
+                                        <i class="fab fa-github"></i> GitHub
+                                    </a>
+                                    {% endif %}
+                                    {% if submission.demo_link %}
+                                    <a href="{{ submission.demo_link }}" target="_blank" class="btn btn-outline-primary btn-sm">
+                                        <i class="fas fa-external-link-alt"></i> Demo
+                                    </a>
+                                    {% endif %}
+                                </div>
+                                <small class="text-muted">Status: {{ submission.status }}</small>
+                            </div>
+                            {% endfor %}
+                        </div>
+                    {% else %}
+                        <p class="text-muted">No submissions yet. Submit your project to get started!</p>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+
+        <div class="col-md-4">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="mb-0">Team Actions</h5>
+                </div>
+                <div class="card-body">
+                    <div class="d-grid gap-2">
+                        <a href="{{ url_for('submit_project', team_id=team.id) }}" class="btn btn-primary">Submit Project</a>
+                        <a href="{{ url_for('hackathon_details', hackathon_id=team.hackathon_id) }}" class="btn btn-outline-primary">View Hackathon</a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %} 

@@ -1,0 +1,108 @@
+{% extends "base.html" %}
+
+{% block title %}Hackathon Platform{% endblock %}
+
+{% block content %}
+<div class="container mt-5">
+    <div class="row justify-content-center">
+        <div class="col-md-8">
+            <div class="jumbotron text-center">
+                <h1 class="display-4">Welcome to the Hackathon Platform!</h1>
+                <p class="lead">Manage and participate in hackathons with ease.</p>
+            </div>
+            <form method="POST" class="mb-4">
+                <div class="card p-3">
+                    <h4>Select your role to continue:</h4>
+                    <div class="form-check form-check-inline">
+                        <input class="form-check-input" type="radio" name="role" id="admin" value="admin" required>
+                        <label class="form-check-label" for="admin">Admin</label>
+                    </div>
+                    <div class="form-check form-check-inline">
+                        <input class="form-check-input" type="radio" name="role" id="participant" value="participant">
+                        <label class="form-check-label" for="participant">Participant</label>
+                    </div>
+                    <button type="submit" class="btn btn-primary ms-3">Continue</button>
+                </div>
+            </form>
+            <hr>
+            <h2 class="mt-4">Upcoming Hackathons</h2>
+            {% if hackathons %}
+                <div class="row">
+                    {% for hackathon in hackathons %}
+                    <div class="col-md-6 mb-4">
+                        <div class="card h-100">
+                            <div class="card-body">
+                                <h5 class="card-title">{{ hackathon.title }}</h5>
+                                <h6 class="card-subtitle mb-2 text-muted">By {{ hackathon.creator_name }}</h6>
+                                <p class="card-text">{{ hackathon.description }}</p>
+                                <div class="d-flex justify-content-between align-items-center">
+                                    <div>
+                                        <small class="text-muted">Start: {{ hackathon.start_date }}</small><br>
+                                        <small class="text-muted">End: {{ hackathon.end_date }}</small>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+            {% else %}
+                <p>No upcoming hackathons at the moment.</p>
+            {% endif %}
+        </div>
+    </div>
+</div>
+
+<!-- Featured Hackathons -->
+<div class="container my-5">
+    <h2 class="text-center mb-4">Featured Hackathons</h2>
+    <div class="row">
+        {% if featured_hackathons %}
+            {% for hackathon in featured_hackathons %}
+                <div class="col-md-4 mb-4">
+                    <div class="card h-100">
+                        <div class="card-body">
+                            <h5 class="card-title">{{ hackathon.title }}</h5>
+                            <p class="card-text">{{ hackathon.description[:150] }}...</p>
+                            <div class="d-flex justify-content-between align-items-center">
+                                <small class="text-muted">
+                                    {{ hackathon.start_date.strftime('%Y-%m-%d') }} to {{ hackathon.end_date.strftime('%Y-%m-%d') }}
+                                </small>
+                                <a href="{{ url_for('hackathon_details', hackathon_id=hackathon.id) }}" class="btn btn-primary">Learn More</a>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            {% endfor %}
+        {% else %}
+            <div class="col-12">
+                <p class="text-center text-muted">No featured hackathons available at the moment.</p>
+            </div>
+        {% endif %}
+    </div>
+</div>
+
+<!-- Features Section -->
+<div class="bg-light py-5">
+    <div class="container">
+        <h2 class="text-center mb-4">Why Choose Our Platform?</h2>
+        <div class="row">
+            <div class="col-md-4 text-center mb-4">
+                <div class="h1 mb-3">🚀</div>
+                <h4>Easy to Use</h4>
+                <p class="text-muted">Simple and intuitive interface for managing hackathons and teams.</p>
+            </div>
+            <div class="col-md-4 text-center mb-4">
+                <div class="h1 mb-3">👥</div>
+                <h4>Team Collaboration</h4>
+                <p class="text-muted">Seamless team formation and management tools.</p>
+            </div>
+            <div class="col-md-4 text-center mb-4">
+                <div class="h1 mb-3">🏆</div>
+                <h4>Track Progress</h4>
+                <p class="text-muted">Monitor submissions and track your hackathon journey.</p>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %} 

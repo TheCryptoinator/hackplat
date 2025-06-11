@@ -1,0 +1,388 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Create Hackathon - Hackathon Platform</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.7.2/font/bootstrap-icons.css">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+    <nav class="navbar navbar-expand-lg navbar-dark bg-dark">
+        <div class="container">
+            <a class="navbar-brand" href="{{ url_for('index') }}">Hackathon Platform</a>
+            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
+                <span class="navbar-toggler-icon"></span>
+            </button>
+            <div class="collapse navbar-collapse" id="navbarNav">
+                <ul class="navbar-nav me-auto">
+                    <li class="nav-item">
+                        <a class="nav-link" href="{{ url_for('dashboard') }}">Dashboard</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link active" href="{{ url_for('hackathons') }}">Hackathons</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="{{ url_for('teams') }}">Teams</a>
+                    </li>
+                    {% if session.get('role') in ['admin', 'organizer'] %}
+                    <li class="nav-item">
+                        <a class="nav-link active" href="{{ url_for('create_hackathon') }}">Create Hackathon</a>
+                    </li>
+                    {% endif %}
+                </ul>
+                <ul class="navbar-nav">
+                    <li class="nav-item dropdown">
+                        <a class="nav-link dropdown-toggle" href="#" id="navbarDropdown" role="button" data-bs-toggle="dropdown">
+                            <i class="bi bi-person-circle"></i> {{ session.get('username') }}
+                        </a>
+                        <ul class="dropdown-menu dropdown-menu-end">
+                            <li><a class="dropdown-item" href="{{ url_for('profile') }}">Profile</a></li>
+                            <li><a class="dropdown-item" href="{{ url_for('settings') }}">Settings</a></li>
+                            <li><hr class="dropdown-divider"></li>
+                            <li><a class="dropdown-item" href="{{ url_for('logout') }}">Logout</a></li>
+                        </ul>
+                    </li>
+                </ul>
+            </div>
+        </div>
+    </nav>
+
+    <div class="container mt-4">
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+                {% for category, message in messages %}
+                    <div class="alert alert-{{ category }}">{{ message }}</div>
+                {% endfor %}
+            {% endif %}
+        {% endwith %}
+
+        <div class="row justify-content-center">
+            <div class="col-md-10">
+                <div class="card shadow-sm">
+                    <div class="card-body">
+                        <h4 class="card-title mb-4">Create New Hackathon</h4>
+                        <form method="POST" action="{{ url_for('create_hackathon') }}" enctype="multipart/form-data" class="needs-validation" novalidate>
+                            {{ form.csrf_token }}
+
+                            <!-- Basic Information -->
+                            <div class="mb-4">
+                                <h5>Basic Information</h5>
+                                <div class="row">
+                                    <div class="col-md-8">
+                                        <div class="mb-3">
+                                            <label for="title" class="form-label">Title</label>
+                                            <input type="text" class="form-control" id="title" name="title" required>
+                                        </div>
+                                    </div>
+                                    <div class="col-md-4">
+                                        <div class="mb-3">
+                                            <label for="banner" class="form-label">Banner Image</label>
+                                            <input type="file" class="form-control" id="banner" name="banner" accept="image/*">
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div class="mb-3">
+                                    <label for="description" class="form-label">Description</label>
+                                    <textarea class="form-control" id="description" name="description" rows="4" required></textarea>
+                                </div>
+
+                                <div class="row">
+                                    <div class="col-md-6">
+                                        <div class="mb-3">
+                                            <label for="start_date" class="form-label">Start Date</label>
+                                            <input type="datetime-local" class="form-control" id="start_date" name="start_date" required>
+                                        </div>
+                                    </div>
+                                    <div class="col-md-6">
+                                        <div class="mb-3">
+                                            <label for="end_date" class="form-label">End Date</label>
+                                            <input type="datetime-local" class="form-control" id="end_date" name="end_date" required>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div class="row">
+                                    <div class="col-md-6">
+                                        <div class="mb-3">
+                                            <label for="location" class="form-label">Location</label>
+                                            <input type="text" class="form-control" id="location" name="location" required>
+                                        </div>
+                                    </div>
+                                    <div class="col-md-6">
+                                        <div class="mb-3">
+                                            <label for="max_team_size" class="form-label">Maximum Team Size</label>
+                                            <input type="number" class="form-control" id="max_team_size" name="max_team_size" min="1" max="10" required>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div class="mb-3">
+                                    <div class="form-check">
+                                        <input class="form-check-input" type="checkbox" id="is_online" name="is_online">
+                                        <label class="form-check-label" for="is_online">
+                                            This is an online hackathon
+                                        </label>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Prizes -->
+                            <div class="mb-4">
+                                <h5>Prizes</h5>
+                                <div id="prizes">
+                                    <div class="prize-item mb-3">
+                                        <div class="row">
+                                            <div class="col-md-4">
+                                                <div class="mb-3">
+                                                    <label class="form-label">Rank</label>
+                                                    <input type="text" class="form-control" name="prize_ranks[]" placeholder="e.g., 1st Place" required>
+                                                </div>
+                                            </div>
+                                            <div class="col-md-6">
+                                                <div class="mb-3">
+                                                    <label class="form-label">Description</label>
+                                                    <input type="text" class="form-control" name="prize_descriptions[]" placeholder="e.g., $1000 Cash Prize" required>
+                                                </div>
+                                            </div>
+                                            <div class="col-md-2">
+                                                <div class="mb-3">
+                                                    <label class="form-label">&nbsp;</label>
+                                                    <button type="button" class="btn btn-danger w-100" onclick="removePrize(this)">
+                                                        <i class="bi bi-trash"></i>
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                                <button type="button" class="btn btn-outline-primary" onclick="addPrize()">
+                                    <i class="bi bi-plus"></i> Add Prize
+                                </button>
+                            </div>
+
+                            <!-- Schedule -->
+                            <div class="mb-4">
+                                <h5>Schedule</h5>
+                                <div id="schedule">
+                                    <div class="schedule-item mb-3">
+                                        <div class="row">
+                                            <div class="col-md-4">
+                                                <div class="mb-3">
+                                                    <label class="form-label">Date & Time</label>
+                                                    <input type="datetime-local" class="form-control" name="schedule_dates[]" required>
+                                                </div>
+                                            </div>
+                                            <div class="col-md-6">
+                                                <div class="mb-3">
+                                                    <label class="form-label">Event</label>
+                                                    <input type="text" class="form-control" name="schedule_events[]" placeholder="e.g., Opening Ceremony" required>
+                                                </div>
+                                            </div>
+                                            <div class="col-md-2">
+                                                <div class="mb-3">
+                                                    <label class="form-label">&nbsp;</label>
+                                                    <button type="button" class="btn btn-danger w-100" onclick="removeSchedule(this)">
+                                                        <i class="bi bi-trash"></i>
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                                <button type="button" class="btn btn-outline-primary" onclick="addSchedule()">
+                                    <i class="bi bi-plus"></i> Add Event
+                                </button>
+                            </div>
+
+                            <!-- Rules -->
+                            <div class="mb-4">
+                                <h5>Rules & Guidelines</h5>
+                                <div class="mb-3">
+                                    <label for="rules" class="form-label">Rules</label>
+                                    <textarea class="form-control" id="rules" name="rules" rows="4" required></textarea>
+                                </div>
+                            </div>
+
+                            <!-- Resources -->
+                            <div class="mb-4">
+                                <h5>Resources</h5>
+                                <div id="resources">
+                                    <div class="resource-item mb-3">
+                                        <div class="row">
+                                            <div class="col-md-4">
+                                                <div class="mb-3">
+                                                    <label class="form-label">Title</label>
+                                                    <input type="text" class="form-control" name="resource_titles[]" placeholder="e.g., API Documentation" required>
+                                                </div>
+                                            </div>
+                                            <div class="col-md-6">
+                                                <div class="mb-3">
+                                                    <label class="form-label">URL</label>
+                                                    <input type="url" class="form-control" name="resource_urls[]" placeholder="https://..." required>
+                                                </div>
+                                            </div>
+                                            <div class="col-md-2">
+                                                <div class="mb-3">
+                                                    <label class="form-label">&nbsp;</label>
+                                                    <button type="button" class="btn btn-danger w-100" onclick="removeResource(this)">
+                                                        <i class="bi bi-trash"></i>
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                                <button type="button" class="btn btn-outline-primary" onclick="addResource()">
+                                    <i class="bi bi-plus"></i> Add Resource
+                                </button>
+                            </div>
+
+                            <!-- Submit Buttons -->
+                            <div class="d-flex justify-content-between">
+                                <a href="{{ url_for('hackathons') }}" class="btn btn-outline-secondary">Cancel</a>
+                                <button type="submit" class="btn btn-primary">Create Hackathon</button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <footer class="footer mt-5 py-3 bg-light">
+        <div class="container text-center">
+            <span class="text-muted">© 2024 Hackathon Platform. All rights reserved.</span>
+        </div>
+    </footer>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="{{ url_for('static', filename='js/main.js') }}"></script>
+    <script>
+        // Add prize field
+        function addPrize() {
+            const prizeHtml = `
+                <div class="prize-item mb-3">
+                    <div class="row">
+                        <div class="col-md-4">
+                            <div class="mb-3">
+                                <label class="form-label">Rank</label>
+                                <input type="text" class="form-control" name="prize_ranks[]" placeholder="e.g., 1st Place" required>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label class="form-label">Description</label>
+                                <input type="text" class="form-control" name="prize_descriptions[]" placeholder="e.g., $1000 Cash Prize" required>
+                            </div>
+                        </div>
+                        <div class="col-md-2">
+                            <div class="mb-3">
+                                <label class="form-label">&nbsp;</label>
+                                <button type="button" class="btn btn-danger w-100" onclick="removePrize(this)">
+                                    <i class="bi bi-trash"></i>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            `;
+            document.getElementById('prizes').insertAdjacentHTML('beforeend', prizeHtml);
+        }
+
+        // Remove prize field
+        function removePrize(button) {
+            button.closest('.prize-item').remove();
+        }
+
+        // Add schedule field
+        function addSchedule() {
+            const scheduleHtml = `
+                <div class="schedule-item mb-3">
+                    <div class="row">
+                        <div class="col-md-4">
+                            <div class="mb-3">
+                                <label class="form-label">Date & Time</label>
+                                <input type="datetime-local" class="form-control" name="schedule_dates[]" required>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label class="form-label">Event</label>
+                                <input type="text" class="form-control" name="schedule_events[]" placeholder="e.g., Opening Ceremony" required>
+                            </div>
+                        </div>
+                        <div class="col-md-2">
+                            <div class="mb-3">
+                                <label class="form-label">&nbsp;</label>
+                                <button type="button" class="btn btn-danger w-100" onclick="removeSchedule(this)">
+                                    <i class="bi bi-trash"></i>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            `;
+            document.getElementById('schedule').insertAdjacentHTML('beforeend', scheduleHtml);
+        }
+
+        // Remove schedule field
+        function removeSchedule(button) {
+            button.closest('.schedule-item').remove();
+        }
+
+        // Add resource field
+        function addResource() {
+            const resourceHtml = `
+                <div class="resource-item mb-3">
+                    <div class="row">
+                        <div class="col-md-4">
+                            <div class="mb-3">
+                                <label class="form-label">Title</label>
+                                <input type="text" class="form-control" name="resource_titles[]" placeholder="e.g., API Documentation" required>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label class="form-label">URL</label>
+                                <input type="url" class="form-control" name="resource_urls[]" placeholder="https://..." required>
+                            </div>
+                        </div>
+                        <div class="col-md-2">
+                            <div class="mb-3">
+                                <label class="form-label">&nbsp;</label>
+                                <button type="button" class="btn btn-danger w-100" onclick="removeResource(this)">
+                                    <i class="bi bi-trash"></i>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            `;
+            document.getElementById('resources').insertAdjacentHTML('beforeend', resourceHtml);
+        }
+
+        // Remove resource field
+        function removeResource(button) {
+            button.closest('.resource-item').remove();
+        }
+
+        // Form validation
+        (function () {
+            'use strict'
+            var forms = document.querySelectorAll('.needs-validation')
+            Array.prototype.slice.call(forms).forEach(function (form) {
+                form.addEventListener('submit', function (event) {
+                    if (!form.checkValidity()) {
+                        event.preventDefault()
+                        event.stopPropagation()
+                    }
+                    form.classList.add('was-validated')
+                }, false)
+            })
+        })()
+    </script>
+</body>
+</html> 

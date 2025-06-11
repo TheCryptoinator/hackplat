@@ -1,0 +1,603 @@
+---
+description: 
+globs: 
+alwaysApply: true
+---
+# Cursor Rules: Hackathon Platform Development (Flask-based)
+
+## Project Overview
+We are building a comprehensive hackathon platform using Flask that handles event creation, participant management, team formation, project submissions, judging, and analytics. The platform serves multiple user types: participants, organizers, judges, mentors, and sponsors.
+
+## Core Architecture
+
+### Tech Stack
+- **Backend**: Python 3.12 with Flask
+- **Database**: PostgreSQL with SQLAlchemy ORM
+- **Cache/Sessions**: Redis for sessions, caching, rate limiting, real-time features
+- **Authentication**: Flask-Login with Werkzeug password hashing
+- **Frontend**: Bootstrap 5.1.3 + Font Awesome 6.0.0 + Three.js for 3D effects
+- **Styling**: Custom space-themed CSS with glass effects
+- **Security**: Flask-Limiter for rate limiting, CSRF protection
+- **Development**: Docker + Docker Compose for containerization
+
+### Project Structure
+```
+hackathon-platform/
+├── hackathon_app.py          # Main Flask application
+├── config.py                 # Configuration management
+├── models/
+│   ├── __init__.py
+│   ├── user.py
+│   ├── event.py
+│   ├── team.py
+│   ├── project.py
+│   └── analytics.py
+├── routes/
+│   ├── __init__.py
+│   ├── auth.py
+│   ├── events.py
+│   ├── teams.py
+│   ├── projects.py
+│   ├── judging.py
+│   └── api.py
+├── services/
+│   ├── __init__.py
+│   ├── cache_service.py
+│   ├── email_service.py
+│   ├── analytics_service.py
+│   └── matching_service.py
+├── utils/
+│   ├── __init__.py
+│   ├── decorators.py
+│   ├── validators.py
+│   └── helpers.py
+├── static/
+│   ├── css/
+│   │   └── space-theme.css
+│   ├── js/
+│   └── img/
+├── templates/
+│   ├── base.html
+│   ├── auth/
+│   ├── events/
+│   ├── teams/
+│   └── projects/
+├── requirements.txt
+├── Dockerfile
+├── docker-compose.yml
+└── .env
+```
+
+## Development Guidelines
+
+### 1. Flask Application Patterns
+
+#### Main Application Structure:
+```python
+from flask import Flask, render_template, request, redirect, url_for, flash, jsonify
+from flask_sqlalchemy import SQLAlchemy
+from flask_login import LoginManager, login_required, current_user
+from flask_caching import Cache
+from flask_limiter import Limiter
+from flask_limiter.util import get_remote_address
+from flask_session import Session
+import redis
+
+# Initialize extensions
+app = Flask(__name__)
+db = SQLAlchemy()
+login_manager = LoginManager()
+cache = Cache()
+limiter = Limiter(key_func=get_remote_address)
+redis_client = redis.from_url(app.config['REDIS_URL'])
+
+# Configuration
+app.config.from_object('config.Config')
+
+# Initialize extensions with app
+db.init_app(app)
+login_manager.init_app(app)
+cache.init_app(app)
+limiter.init_app(app)
+Session(app)
+```
+
+#### Route Patterns:
+```python
+from flask import Blueprint
+from flask_login import login_required, current_user
+from utils.decorators import require_role, cache_with_redis
+
+events_bp = Blueprint('events', __name__, url_prefix='/events')
+
+@events_bp.route('/')
+@cache_with_redis(timeout=300)
+def list_events():
+    """List all public events with caching"""
+    events = Event.query.filter_by(visibility='public').all()
+    return render_template('events/list.html', events=events)
+
+@events_bp.route('/create', methods=['GET', 'POST'])
+@login_required
+@require_role('organizer')
+@limiter.limit("5 per minute")
+def create_event():
+    """Create new event with rate limiting"""
+    if request.method == 'POST':
+        # Handle form submission
+        event = Event(
+            name=request.form['name'],
+            description=request.form['description'],
+            created_by=current_user.id
+        )
+        db.session.add(event)
+        db.session.commit()
+        
+        # Invalidate cache
+        cache.delete('events_list')
+        
+        flash('Event created successfully!', 'success')
+        return redirect(url_for('events.view_event', id=event.id))
+    
+    return render_template('events/create.html')
+
+@events_bp.route('/<uuid:event_id>')
+@cache_with_redis(timeout=600, key_prefix='event_detail')
+def view_event(event_id):
+    """View event details with caching"""
+    event = Event.query.get_or_404(event_id)
+    return render_template('events/detail.html', event=event)
+```
+
+### 2. Database Models (SQLAlchemy)
+
+#### Base Model Pattern:
+```python
+from flask_sqlalchemy import SQLAlchemy
+from sqlalchemy.dialects.postgresql import UUID, JSON
+from sqlalchemy import func
+import uuid
+from datetime import datetime
+
+db = SQLAlchemy()
+
+class BaseModel(db.Model):
+    __abstract__ = True
+    
+    id = db.Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    created_at = db.Column(db.DateTime(timezone=True), default=func.now())
+    updated_at = db.Column(db.DateTime(timezone=True), default=func.now(), onupdate=func.now())
+
+class Event(BaseModel):
+    __tablename__ = 'events'
+    
+    organization_id = db.Column(UUID(as_uuid=True), db.ForeignKey('organizations.id'))
+    name = db.Column(db.String(255), nullable=False)
+    slug = db.Column(db.String(150), unique=True, nullable=False)
+    description = db.Column(db.Text)
+    
+    # Event timing
+    registration_start = db.Column(db.DateTime(timezone=True))
+    registration_end = db.Column(db.DateTime(timezone=True))
+    event_start = db.Column(db.DateTime(timezone=True), nullable=False)
+    event_end = db.Column(db.DateTime(timezone=True), nullable=False)
+    
+    # Configuration as JSON
+    settings = db.Column(JSON, default=dict)
+    prizes = db.Column(JSON, default=list)
+    schedule = db.Column(JSON, default=list)
+    
+    # Status and visibility
+    status = db.Column(db.String(50), default='draft')
+    visibility = db.Column(db.String(50), default='public')
+    
+    # Relationships
+    organization = db.relationship('Organization', backref='events')
+    registrations = db.relationship('EventRegistration', backref='event', cascade='all, delete-orphan')
+    teams = db.relationship('Team', backref='event', cascade='all, delete-orphan')
+    
+    def __repr__(self):
+        return f'<Event {self.name}>'
+    
+    @property
+    def registration_count(self):
+        return len([r for r in self.registrations if r.status == 'registered'])
+    
+    def to_dict(self):
+        return {
+            'id': str(self.id),
+            'name': self.name,
+            'description': self.description,
+            'event_start': self.event_start.isoformat() if self.event_start else None,
+            'event_end': self.event_end.isoformat() if self.event_end else None,
+            'status': self.status,
+            'registration_count': self.registration_count
+        }
+```
+
+### 3. Redis Integration Patterns
+
+#### Caching Decorator:
+```python
+import functools
+import json
+import redis
+from flask import current_app
+
+def cache_with_redis(timeout=300, key_prefix=''):
+    def decorator(f):
+        @functools.wraps(f)
+        def decorated_function(*args, **kwargs):
+            # Generate cache key
+            cache_key = f"{key_prefix}:{f.__name__}:{hash(str(args) + str(kwargs))}"
+            
+            try:
+                # Try to get from cache
+                cached_result = redis_client.get(cache_key)
+                if cached_result:
+                    return json.loads(cached_result)
+                
+                # Execute function and cache result
+                result = f(*args, **kwargs)
+                redis_client.setex(cache_key, timeout, json.dumps(result, default=str))
+                return result
+                
+            except redis.RedisError:
+                # Fallback to direct execution if Redis is down
+                return f(*args, **kwargs)
+                
+        return decorated_function
+    return decorator
+
+# Usage in services
+@cache_with_redis(timeout=600, key_prefix='leaderboard')
+def get_event_leaderboard(event_id):
+    # Expensive calculation
+    return calculate_leaderboard(event_id)
+```
+
+#### Session Management:
+```python
+# In config.py
+import redis
+import os
+
+class Config:
+    SECRET_KEY = os.environ.get('SECRET_KEY')
+    SQLALCHEMY_DATABASE_URI = os.environ.get('DATABASE_URL')
+    REDIS_URL = os.environ.get('REDIS_URL', 'redis://localhost:6379')
+    
+    # Session configuration
+    SESSION_TYPE = 'redis'
+    SESSION_REDIS = redis.from_url(REDIS_URL)
+    SESSION_PERMANENT = False
+    SESSION_USE_SIGNER = True
+    SESSION_KEY_PREFIX = 'hackathon:'
+    
+    # Cache configuration
+    CACHE_TYPE = 'redis'
+    CACHE_REDIS_URL = REDIS_URL
+    CACHE_DEFAULT_TIMEOUT = 300
+```
+
+#### Rate Limiting:
+```python
+from flask_limiter import Limiter
+from flask_limiter.util import get_remote_address
+
+limiter = Limiter(
+    app,
+    key_func=get_remote_address,
+    default_limits=["1000 per hour"],
+    storage_uri=app.config['REDIS_URL']
+)
+
+# Usage in routes
+@app.route('/api/register', methods=['POST'])
+@limiter.limit("5 per minute")
+def register_for_event():
+    # Registration logic with rate limiting
+    pass
+```
+
+### 4. Authentication & Authorization
+
+#### User Model with Flask-Login:
+```python
+from flask_login import UserMixin
+from werkzeug.security import generate_password_hash, check_password_hash
+
+class User(BaseModel, UserMixin):
+    __tablename__ = 'users'
+    
+    email = db.Column(db.String(255), unique=True, nullable=False)
+    username = db.Column(db.String(100), unique=True, nullable=False)
+    password_hash = db.Column(db.String(255))
+    first_name = db.Column(db.String(100))
+    last_name = db.Column(db.String(100))
+    role = db.Column(db.String(50), default='participant')
+    skills = db.Column(JSON, default=list)
+    is_active = db.Column(db.Boolean, default=True)
+    email_verified = db.Column(db.Boolean, default=False)
+    
+    def set_password(self, password):
+        self.password_hash = generate_password_hash(password)
+    
+    def check_password(self, password):
+        return check_password_hash(self.password_hash, password)
+    
+    def has_role(self, role):
+        return self.role == role
+    
+    @property
+    def is_organizer(self):
+        return self.role in ['organizer', 'admin']
+
+# Flask-Login setup
+@login_manager.user_loader
+def load_user(user_id):
+    return User.query.get(user_id)
+
+login_manager.login_view = 'auth.login'
+login_manager.login_message = 'Please log in to access this page.'
+```
+
+#### Role-based Access Control:
+```python
+from functools import wraps
+from flask import abort
+from flask_login import current_user
+
+def require_role(role):
+    def decorator(f):
+        @wraps(f)
+        def decorated_function(*args, **kwargs):
+            if not current_user.is_authenticated:
+                return redirect(url_for('auth.login'))
+            if not current_user.has_role(role):
+                abort(403)
+            return f(*args, **kwargs)
+        return decorated_function
+    return decorator
+
+# Usage
+@app.route('/admin/dashboard')
+@login_required
+@require_role('admin')
+def admin_dashboard():
+    return render_template('admin/dashboard.html')
+```
+
+### 5. Template Patterns (Jinja2)
+
+#### Base Template Structure:
+```html
+<!-- templates/base.html -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}Hackathon Platform{% endblock %}</title>
+    
+    <!-- Bootstrap CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <!-- Font Awesome -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <!-- Custom CSS -->
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/space-theme.css') }}">
+    
+    {% block extra_css %}{% endblock %}
+</head>
+<body>
+    <!-- Navigation -->
+    <nav class="navbar navbar-expand-lg navbar-dark bg-dark">
+        <div class="container">
+            <a class="navbar-brand" href="{{ url_for('main.index') }}">
+                <i class="fas fa-rocket"></i> HackSpace
+            </a>
+            <!-- Navigation items -->
+            <div class="navbar-nav ms-auto">
+                {% if current_user.is_authenticated %}
+                    <a class="nav-link" href="{{ url_for('events.list_events') }}">Events</a>
+                    {% if current_user.is_organizer %}
+                        <a class="nav-link" href="{{ url_for('events.create_event') }}">Create Event</a>
+                    {% endif %}
+                    <a class="nav-link" href="{{ url_for('auth.logout') }}">Logout</a>
+                {% else %}
+                    <a class="nav-link" href="{{ url_for('auth.login') }}">Login</a>
+                    <a class="nav-link" href="{{ url_for('auth.register') }}">Register</a>
+                {% endif %}
+            </div>
+        </div>
+    </nav>
+
+    <!-- Flash Messages -->
+    {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+            <div class="container mt-3">
+                {% for category, message in messages %}
+                    <div class="alert alert-{{ 'danger' if category == 'error' else category }} alert-dismissible fade show">
+                        {{ message }}
+                        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                    </div>
+                {% endfor %}
+            </div>
+        {% endif %}
+    {% endwith %}
+
+    <!-- Main Content -->
+    <main class="container mt-4">
+        {% block content %}{% endblock %}
+    </main>
+
+    <!-- Three.js Space Background -->
+    <div id="space-background"></div>
+
+    <!-- Scripts -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="{{ url_for('static', filename='js/space-background.js') }}"></script>
+    {% block extra_js %}{% endblock %}
+</body>
+</html>
+```
+
+### 6. API Endpoints for AJAX
+
+#### JSON API Pattern:
+```python
+from flask import jsonify, request
+
+@app.route('/api/events/<uuid:event_id>/teams', methods=['GET'])
+@login_required
+def api_get_teams(event_id):
+    """API endpoint for team data"""
+    event = Event.query.get_or_404(event_id)
+    teams = Team.query.filter_by(event_id=event_id).all()
+    
+    return jsonify({
+        'success': True,
+        'data': [team.to_dict() for team in teams],
+        'total': len(teams)
+    })
+
+@app.route('/api/teams/<uuid:team_id>/join', methods=['POST'])
+@login_required
+@limiter.limit("10 per minute")
+def api_join_team(team_id):
+    """Join a team via API"""
+    team = Team.query.get_or_404(team_id)
+    
+    # Check if user can join
+    if team.is_full():
+        return jsonify({
+            'success': False,
+            'error': 'Team is full'
+        }), 400
+    
+    # Add team member
+    member = TeamMember(team_id=team_id, user_id=current_user.id)
+    db.session.add(member)
+    db.session.commit()
+    
+    # Invalidate cache
+    cache.delete(f'team_details:{team_id}')
+    
+    return jsonify({
+        'success': True,
+        'message': 'Successfully joined team',
+        'data': team.to_dict()
+    })
+```
+
+### 7. Real-time Updates with WebSockets (Optional)
+
+#### Socket.IO Integration:
+```python
+from flask_socketio import SocketIO, emit, join_room, leave_room
+
+socketio = SocketIO(app, cors_allowed_origins="*")
+
+@socketio.on('join_event')
+def on_join_event(data):
+    event_id = data['event_id']
+    join_room(f'event_{event_id}')
+    emit('status', {'msg': f'Joined event {event_id}'})
+
+@socketio.on('team_update')
+def handle_team_update(data):
+    team_id = data['team_id']
+    # Broadcast to all users in the event
+    emit('team_changed', data, room=f'event_{data["event_id"]}')
+```
+
+### 8. Configuration Management
+
+#### Environment-based Config:
+```python
+import os
+from datetime import timedelta
+
+class Config:
+    SECRET_KEY = os.environ.get('SECRET_KEY') or 'dev-secret-key'
+    
+    # Database
+    SQLALCHEMY_DATABASE_URI = os.environ.get('DATABASE_URL') or 'postgresql://user:pass@localhost/hackathon'
+    SQLALCHEMY_TRACK_MODIFICATIONS = False
+    
+    # Redis
+    REDIS_URL = os.environ.get('REDIS_URL') or 'redis://localhost:6379'
+    
+    # Session
+    SESSION_TYPE = 'redis'
+    SESSION_PERMANENT = False
+    SESSION_USE_SIGNER = True
+    SESSION_KEY_PREFIX = 'hackathon:'
+    PERMANENT_SESSION_LIFETIME = timedelta(hours=24)
+    
+    # Cache
+    CACHE_TYPE = 'redis'
+    CACHE_DEFAULT_TIMEOUT = 300
+    
+    # Email (if needed)
+    MAIL_SERVER = os.environ.get('MAIL_SERVER')
+    MAIL_PORT = int(os.environ.get('MAIL_PORT') or 587)
+    MAIL_USE_TLS = os.environ.get('MAIL_USE_TLS', 'true').lower() in ['true', 'on', '1']
+    MAIL_USERNAME = os.environ.get('MAIL_USERNAME')
+    MAIL_PASSWORD = os.environ.get('MAIL_PASSWORD')
+
+class DevelopmentConfig(Config):
+    DEBUG = True
+    SQLALCHEMY_ECHO = True  # Log SQL queries
+
+class ProductionConfig(Config):
+    DEBUG = False
+```
+
+## Context Preservation Rules
+
+### When Adding New Features:
+1. **Follow Flask Blueprint pattern** - Organize routes by feature area
+2. **Use SQLAlchemy models** - Maintain existing model patterns with BaseModel
+3. **Implement caching** - Use Redis caching for expensive operations
+4. **Add rate limiting** - Protect endpoints with Flask-Limiter
+5. **Follow template inheritance** - Extend base.html for consistent UI
+
+### Database Changes:
+1. **Use Flask-Migrate** - Create and run database migrations
+2. **Maintain relationships** - Keep foreign keys and backrefs consistent
+3. **Use JSON columns** - Store flexible configuration data as JSON
+4. **Add indexes** - Create indexes for frequently queried columns
+
+### Redis Usage Patterns:
+1. **Sessions** - All user sessions stored in Redis
+2. **Caching** - Cache expensive database queries and calculations
+3. **Rate limiting** - Store rate limit counters in Redis
+4. **Real-time data** - Use Redis for live features like team updates
+
+### Security Guidelines:
+1. **CSRF protection** - Use Flask-WTF for form security
+2. **Rate limiting** - Limit API endpoints and sensitive operations
+3. **Role-based access** - Use decorators for authorization
+4. **Password security** - Use Werkzeug for password hashing
+
+## Remember: This is a Flask-based Platform
+
+Every feature should consider:
+- **Blueprint organization** - Keep related routes together
+- **Template inheritance** - Maintain consistent UI structure
+- **Redis integration** - Use for caching, sessions, and real-time features
+- **PostgreSQL relationships** - Maintain proper foreign key constraints
+- **Space theme consistency** - Follow the established visual design
+- **Rate limiting** - Protect against abuse and ensure fair usage
+
+Always ask yourself:
+- Which blueprint should this route belong to?
+- What data should be cached in Redis?
+- How does this feature integrate with the space theme?
+- What rate limits should be applied?
+
+- How does this maintain the PostgreSQL relationships?
