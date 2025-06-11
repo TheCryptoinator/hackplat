@@ -5,21 +5,20 @@ services:
     build: .
     ports:
       - "10000:5000"
-    volumes:
-      - .:/app
     environment:
       - FLASK_APP=wsgi.py
       - FLASK_ENV=production
-      - FLASK_DEBUG=1
-      - PYTHONUNBUFFERED=1
       - DATABASE_URL=postgresql://postgres:postgres@db:5432/hackathon
       - REDIS_URL=redis://redis:6379/0
     depends_on:
       - db
       - redis
     restart: always
-    networks:
-      - hackathon-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
 
   db:
     image: postgres:15
@@ -29,37 +28,27 @@ services:
       - POSTGRES_DB=hackathon
     volumes:
       - postgres_data:/var/lib/postgresql/data
-    ports:
-      - "5432:5432"
+    restart: always
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U postgres"]
-      interval: 5s
+      interval: 10s
       timeout: 5s
       retries: 5
-    restart: always
-    networks:
-      - hackathon-network
 
   redis:
     image: redis:7
-    ports:
-      - "6379:6379"
     volumes:
       - redis_data:/data
+    restart: always
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
-      interval: 5s
+      interval: 10s
       timeout: 5s
       retries: 5
-    restart: always
-    networks:
-      - hackathon-network
 
 volumes:
   postgres_data:
-    driver: local
   redis_data:
-    driver: local
 
 networks:
   hackathon-network:
