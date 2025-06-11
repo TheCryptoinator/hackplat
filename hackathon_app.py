@@ -1,85 +1,103 @@
-from flask import Flask, render_template, request, redirect, url_for, flash, session, g
+from flask import Flask, render_template, request, redirect, url_for, flash, jsonify, session, g
 from flask_sqlalchemy import SQLAlchemy
+from flask_migrate import Migrate
 from flask_login import LoginManager, UserMixin, login_user, login_required, logout_user, current_user
-from werkzeug.security import generate_password_hash, check_password_hash
-from datetime import datetime, timedelta
-import os
-import psycopg2
-from psycopg2.extras import DictCursor
+from flask_wtf import CSRFProtect
 from flask_caching import Cache
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
 from flask_session import Session
-import redis
+from datetime import datetime, timedelta
+import os
+import psycopg2
+from psycopg2.extras import DictCursor
 from functools import wraps
 
 app = Flask(__name__)
 
 # Load configuration
-app.config.from_object('config.ProductionConfig')
+env = os.environ.get('FLASK_ENV', 'development')
+if env == 'production':
+    app.config.from_object('config.ProductionConfig')
+elif env == 'testing':
+    app.config.from_object('config.TestingConfig')
+else:
+    app.config.from_object('config.DevelopmentConfig')
 
 # Initialize extensions
 db = SQLAlchemy(app)
-login_manager = LoginManager()
-login_manager.init_app(app)
-login_manager.login_view = 'login'
+migrate = Migrate(app, db)
+login_manager = LoginManager(app)
+login_manager.login_view = 'auth.login'
+csrf = CSRFProtect(app)
 
-# Initialize Redis with fallback to filesystem session
-try:
-    redis_client = redis.Redis(
-        host=app.config['REDIS_HOST'],
-        port=app.config['REDIS_PORT'],
-        db=app.config['REDIS_DB'],
-        password=app.config['REDIS_PASSWORD'],
-        decode_responses=True,
-        socket_timeout=5,
-        socket_connect_timeout=5
-    )
-    # Test connection
-    redis_client.ping()
-    app.config['SESSION_TYPE'] = 'redis'
-    app.config['SESSION_REDIS'] = redis_client
-except (redis.ConnectionError, redis.TimeoutError):
-    print("Redis connection failed, falling back to filesystem session")
-    app.config['SESSION_TYPE'] = 'filesystem'
-    app.config['SESSION_FILE_DIR'] = '/tmp/flask_session'
-    app.config['SESSION_FILE_THRESHOLD'] = 500
-    redis_client = None
+# Configure session to use filesystem
+app.config['SESSION_TYPE'] = 'filesystem'
+app.config['SESSION_FILE_DIR'] = '/tmp/flask_session'
+app.config['SESSION_FILE_THRESHOLD'] = 500
+app.config['SESSION_PERMANENT'] = False
+app.config['SESSION_USE_SIGNER'] = True
+app.config['SESSION_KEY_PREFIX'] = 'hackathon:'
 
-# Initialize Cache with fallback
-if redis_client:
-    cache = Cache(app, config={
-        'CACHE_TYPE': 'redis',
-        'CACHE_REDIS_URL': app.config['REDIS_URL'],
-        'CACHE_DEFAULT_TIMEOUT': 300
-    })
-else:
-    cache = Cache(app, config={
-        'CACHE_TYPE': 'filesystem',
-        'CACHE_DIR': '/tmp/flask_cache',
-        'CACHE_DEFAULT_TIMEOUT': 300
-    })
+# Initialize Cache with filesystem backend
+cache = Cache(app)
 
-# Initialize Rate Limiter with fallback
-if redis_client:
-    limiter = Limiter(
-        app=app,
-        key_func=get_remote_address,
-        storage_uri=app.config['RATELIMIT_STORAGE_URL']
-    )
-else:
-    limiter = Limiter(
-        app=app,
-        key_func=get_remote_address,
-        storage_uri="memory://"
-    )
+# Initialize Rate Limiter with memory backend
+limiter = Limiter(
+    app=app,
+    key_func=get_remote_address,
+    storage_uri="memory://",
+    default_limits=["200 per day", "50 per hour"]
+)
 
 # Initialize Session
 Session(app)
 
+# Import models
+from models import User, Hackathon, Team, Project, TeamMember, TeamInvitation, TeamJoinRequest, TeamUpdate, ProjectUpdate, ProjectFeedback, ProjectScreenshot, ProjectResource, HackathonResource, HackathonSponsor, HackathonPrize, HackathonSchedule, HackathonRule, HackathonCategory, HackathonTag, HackathonSkill, HackathonTechnology, HackathonFeature, HackathonRequirement, HackathonSubmission, HackathonSubmissionFeedback, HackathonSubmissionScore, HackathonSubmissionComment, HackathonSubmissionVote, HackathonSubmissionReport, HackathonSubmissionAward, HackathonSubmissionPrize, HackathonSubmissionCertificate, HackathonSubmissionBadge, HackathonSubmissionMedal, HackathonSubmissionTrophy, HackathonSubmissionCup, HackathonSubmissionRibbon, HackathonSubmissionSticker, HackathonSubmissionPatch, HackathonSubmissionPin, HackathonSubmissionButton, HackathonSubmissionTShirt, HackathonSubmissionHoodie, HackathonSubmissionHat, HackathonSubmissionBag, HackathonSubmissionMug, HackathonSubmissionBottle, HackathonSubmissionSticker, HackathonSubmissionPatch, HackathonSubmissionPin, HackathonSubmissionButton, HackathonSubmissionTShirt, HackathonSubmissionHoodie, HackathonSubmissionHat, HackathonSubmissionBag, HackathonSubmissionMug, HackathonSubmissionBottle
+
+# Import blueprints
+from auth import auth_bp
+from hackathons import hackathons_bp
+from teams import teams_bp
+from projects import projects_bp
+from admin import admin_bp
+
+# Register blueprints
+app.register_blueprint(auth_bp)
+app.register_blueprint(hackathons_bp)
+app.register_blueprint(teams_bp)
+app.register_blueprint(projects_bp)
+app.register_blueprint(admin_bp)
+
+# Create database tables
+with app.app_context():
+    db.create_all()
+
+# User loader for Flask-Login
+@login_manager.user_loader
+def load_user(user_id):
+    return User.query.get(int(user_id))
+
+# Error handlers
+@app.errorhandler(404)
+def not_found_error(error):
+    return render_template('errors/404.html'), 404
+
+@app.errorhandler(500)
+def internal_error(error):
+    db.session.rollback()
+    return render_template('errors/500.html'), 500
+
+# Main routes
 @app.route('/')
 def index():
     return render_template('index.html')
+
+@app.route('/dashboard')
+@login_required
+def dashboard():
+    return render_template('dashboard.html')
 
 @app.route('/health')
 def health_check():
