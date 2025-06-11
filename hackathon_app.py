@@ -12,17 +12,19 @@ import os
 import psycopg2
 from psycopg2.extras import DictCursor
 from functools import wraps
+import redis
+from config import Config, DevelopmentConfig, ProductionConfig, TestingConfig
 
 app = Flask(__name__)
 
 # Load configuration
 env = os.environ.get('FLASK_ENV', 'development')
 if env == 'production':
-    app.config.from_object('config.ProductionConfig')
+    app.config.from_object(ProductionConfig)
 elif env == 'testing':
-    app.config.from_object('config.TestingConfig')
+    app.config.from_object(TestingConfig)
 else:
-    app.config.from_object('config.DevelopmentConfig')
+    app.config.from_object(DevelopmentConfig)
 
 # Initialize extensions
 db = SQLAlchemy(app)
@@ -31,30 +33,31 @@ login_manager = LoginManager(app)
 login_manager.login_view = 'auth.login'
 csrf = CSRFProtect(app)
 
-# Configure session to use filesystem
-app.config['SESSION_TYPE'] = 'filesystem'
-app.config['SESSION_FILE_DIR'] = '/tmp/flask_session'
-app.config['SESSION_FILE_THRESHOLD'] = 500
-app.config['SESSION_PERMANENT'] = False
-app.config['SESSION_USE_SIGNER'] = True
-app.config['SESSION_KEY_PREFIX'] = 'hackathon:'
+# Initialize Redis client
+redis_client = redis.Redis(
+    host=app.config['REDIS_HOST'],
+    port=app.config['REDIS_PORT'],
+    db=app.config['REDIS_DB'],
+    password=app.config['REDIS_PASSWORD'],
+    decode_responses=True
+)
 
-# Initialize Cache with filesystem backend
+# Initialize session with Redis
+Session(app)
+
+# Initialize cache with Redis
 cache = Cache(app)
 
-# Initialize Rate Limiter with memory backend
+# Initialize rate limiter with Redis
 limiter = Limiter(
     app=app,
     key_func=get_remote_address,
-    storage_uri="memory://",
+    storage_uri=app.config['REDIS_URL'],
     default_limits=["200 per day", "50 per hour"]
 )
 
-# Initialize Session
-Session(app)
-
 # Import models
-from models import User, Hackathon, Team, Project, TeamMember, TeamInvitation, TeamJoinRequest, TeamUpdate, ProjectUpdate, ProjectFeedback, ProjectScreenshot, ProjectResource, HackathonResource, HackathonSponsor, HackathonPrize, HackathonSchedule, HackathonRule, HackathonCategory, HackathonTag, HackathonSkill, HackathonTechnology, HackathonFeature, HackathonRequirement, HackathonSubmission, HackathonSubmissionFeedback, HackathonSubmissionScore, HackathonSubmissionComment, HackathonSubmissionVote, HackathonSubmissionReport, HackathonSubmissionAward, HackathonSubmissionPrize, HackathonSubmissionCertificate, HackathonSubmissionBadge, HackathonSubmissionMedal, HackathonSubmissionTrophy, HackathonSubmissionCup, HackathonSubmissionRibbon, HackathonSubmissionSticker, HackathonSubmissionPatch, HackathonSubmissionPin, HackathonSubmissionButton, HackathonSubmissionTShirt, HackathonSubmissionHoodie, HackathonSubmissionHat, HackathonSubmissionBag, HackathonSubmissionMug, HackathonSubmissionBottle, HackathonSubmissionSticker, HackathonSubmissionPatch, HackathonSubmissionPin, HackathonSubmissionButton, HackathonSubmissionTShirt, HackathonSubmissionHoodie, HackathonSubmissionHat, HackathonSubmissionBag, HackathonSubmissionMug, HackathonSubmissionBottle
+from models import User, Hackathon, Team, Project, TeamMember, TeamInvitation, TeamJoinRequest, TeamUpdate, ProjectUpdate, ProjectFeedback, ProjectScreenshot, ProjectResource, HackathonResource, HackathonSponsor, HackathonPrize, HackathonSchedule, HackathonRule, HackathonCategory, HackathonTag, HackathonSkill, HackathonTechnology, HackathonFeature, HackathonRequirement, HackathonSubmission, HackathonSubmissionFeedback, HackathonSubmissionScore, HackathonSubmissionComment, HackathonSubmissionVote, HackathonSubmissionReport, HackathonSubmissionAward, HackathonSubmissionPrize, HackathonSubmissionCertificate, HackathonSubmissionBadge, HackathonSubmissionMedal, HackathonSubmissionTrophy, HackathonSubmissionCup, HackathonSubmissionRibbon, HackathonSubmissionSticker, HackathonSubmissionPatch, HackathonSubmissionPin, HackathonSubmissionButton, HackathonSubmissionTShirt, HackathonSubmissionHoodie, HackathonSubmissionHat, HackathonSubmissionBag, HackathonSubmissionMug, HackathonSubmissionBottle
 
 # Import blueprints
 from auth import auth_bp
@@ -101,7 +104,23 @@ def dashboard():
 
 @app.route('/health')
 def health_check():
-    return {'status': 'healthy'}, 200
+    try:
+        # Check database connection
+        db.session.execute('SELECT 1')
+        
+        # Check Redis connection
+        redis_client.ping()
+        
+        return jsonify({
+            'status': 'healthy',
+            'database': 'connected',
+            'redis': 'connected'
+        }), 200
+    except Exception as e:
+        return jsonify({
+            'status': 'unhealthy',
+            'error': str(e)
+        }), 500
 
 # Database connection
 def get_db():

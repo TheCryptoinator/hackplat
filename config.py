@@ -16,22 +16,28 @@ class Config:
     SQLALCHEMY_DATABASE_URI = os.environ.get('DATABASE_URL', 'postgresql://hackathon:test123@db:5432/hackathon')
     SQLALCHEMY_TRACK_MODIFICATIONS = False
     
+    # Redis settings
+    REDIS_HOST = os.environ.get('REDIS_HOST', 'localhost')
+    REDIS_PORT = int(os.environ.get('REDIS_PORT', 6379))
+    REDIS_DB = int(os.environ.get('REDIS_DB', 0))
+    REDIS_PASSWORD = os.environ.get('REDIS_PASSWORD', None)
+    REDIS_URL = f"redis://{REDIS_HOST}:{REDIS_PORT}/{REDIS_DB}"
+    
     # Session settings
-    SESSION_TYPE = 'filesystem'
-    SESSION_FILE_DIR = '/tmp/flask_session'
-    SESSION_FILE_THRESHOLD = 500
+    SESSION_TYPE = 'redis'
+    SESSION_REDIS = REDIS_URL
     SESSION_PERMANENT = False
     SESSION_USE_SIGNER = True
     SESSION_KEY_PREFIX = 'hackathon:'
     PERMANENT_SESSION_LIFETIME = timedelta(days=7)
     
     # Cache settings
-    CACHE_TYPE = 'filesystem'
-    CACHE_DIR = '/tmp/flask_cache'
+    CACHE_TYPE = 'redis'
+    CACHE_REDIS_URL = REDIS_URL
     CACHE_DEFAULT_TIMEOUT = 300
     
     # Rate limiting
-    RATELIMIT_STORAGE_URL = 'memory://'
+    RATELIMIT_STORAGE_URL = REDIS_URL
     RATELIMIT_STRATEGY = 'fixed-window'
     RATELIMIT_DEFAULT = '200 per day'
     
@@ -63,6 +69,7 @@ class DevelopmentConfig(Config):
     SESSION_COOKIE_SECURE = False
     SQLALCHEMY_ECHO = True
     CACHE_DEFAULT_TIMEOUT = 60  # Shorter cache timeout for development
+    REDIS_DB = 1  # Use a different DB for development
 
 class ProductionConfig(Config):
     DEBUG = False
@@ -75,6 +82,7 @@ class ProductionConfig(Config):
     REMEMBER_COOKIE_SECURE = True
     REMEMBER_COOKIE_HTTPONLY = True
     CACHE_DEFAULT_TIMEOUT = 3600  # Longer cache timeout for production
+    REDIS_DB = 0  # Use default DB for production
     SECURITY_HEADERS = {
         'Strict-Transport-Security': 'max-age=31536000; includeSubDomains',
         'X-Content-Type-Options': 'nosniff',
@@ -92,6 +100,7 @@ class TestingConfig(Config):
     SQLALCHEMY_DATABASE_URI = os.environ.get('TEST_DATABASE_URL', 'postgresql://hackathon:test123@db:5432/hackathon_test')
     WTF_CSRF_ENABLED = False
     CACHE_DEFAULT_TIMEOUT = 0  # Disable caching for tests
+    REDIS_DB = 2  # Use a different DB for testing
 
 config = {
     'development': DevelopmentConfig,
